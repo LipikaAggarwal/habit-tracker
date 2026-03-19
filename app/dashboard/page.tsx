@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import HabitGrid from '../components/HabitGrid';
@@ -30,6 +30,9 @@ interface HabitLog {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const currentYear = new Date().getFullYear();
+  const tasksSectionRef = useRef<HTMLElement | null>(null);
+  const gridsSectionRef = useRef<HTMLElement | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +45,8 @@ export default function DashboardPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
   const [showAddTask, setShowAddTask] = useState(false);
   const [taskName, setTaskName] = useState('');
@@ -69,6 +74,12 @@ export default function DashboardPage() {
     () => tasks.find((task) => task.id === selectedTaskId) || null,
     [tasks, selectedTaskId]
   );
+
+  const filteredTasks = useMemo(() => {
+    if (taskFilter === 'completed') return tasks.filter((task) => !!task.completed);
+    if (taskFilter === 'pending') return tasks.filter((task) => !task.completed);
+    return tasks;
+  }, [taskFilter, tasks]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -126,16 +137,6 @@ export default function DashboardPage() {
     fetchData();
   }, [router]);
 
-  const refreshTasks = async () => {
-    const response = await fetch('/api/tasks', {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (!response.ok) return;
-    const data = await response.json();
-    setTasks(data.tasks || []);
-  };
-
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -167,7 +168,8 @@ export default function DashboardPage() {
 
       const created: Task = data.task;
       setTasks((prev) => [created, ...prev]);
-      setSelectedTaskId(created.id);
+      setSelectedTaskId(null);
+      setTaskFilter('all');
 
       setTaskName('');
       setTaskDescription('');
@@ -347,7 +349,25 @@ export default function DashboardPage() {
                   }}
                   className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
                 >
-                  Update Password
+                  Change Password
+                </button>
+                <button
+                  onClick={() => {
+                    tasksSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    setProfileMenuOpen(false);
+                  }}
+                  className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  My Tasks
+                </button>
+                <button
+                  onClick={() => {
+                    gridsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    setProfileMenuOpen(false);
+                  }}
+                  className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
+                >
+                  My Grids
                 </button>
                 <button onClick={handleLogout} className="w-full rounded px-2 py-2 text-left text-sm text-red-300 hover:bg-red-900/20">
                   Logout
@@ -359,54 +379,68 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
-        <section className="rounded-xl border border-zinc-700/80 bg-zinc-900/65 p-5 shadow-xl shadow-black/30">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-100">Create Task</h2>
-            <button
-              onClick={() => setShowAddTask((prev) => !prev)}
-              className="rounded bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-white"
-            >
-              {showAddTask ? 'Close' : 'New Task'}
-            </button>
-          </div>
-
-          {showAddTask && (
-            <form onSubmit={handleAddTask} className="grid grid-cols-1 gap-3 rounded-lg border border-zinc-700/80 bg-zinc-950/60 p-4 md:grid-cols-2 lg:grid-cols-3">
-              <input type="text" value={taskName} onChange={(e) => setTaskName(e.target.value)} placeholder="Task name" className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500" />
-              <input type="text" value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} placeholder="Description" className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500" />
-              <div className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2">
-                <span className="text-sm text-zinc-400">Color</span>
-                <input type="color" value={taskColor} onChange={(e) => setTaskColor(e.target.value)} className="h-8 w-10 cursor-pointer border-0 bg-transparent" />
-                <span className="text-xs text-zinc-500">{taskColor}</span>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-500">Start Date</label>
-                <input type="date" value={taskStartDate} onChange={(e) => setTaskStartDate(e.target.value)} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white" />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-zinc-500">End Date (optional)</label>
-                <input type="date" value={taskEndDate} onChange={(e) => setTaskEndDate(e.target.value)} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white" />
-              </div>
-              <button type="submit" disabled={addingTask} className="rounded bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-white disabled:bg-zinc-400 lg:self-end">
-                {addingTask ? 'Creating...' : 'Create'}
-              </button>
-            </form>
-          )}
+        <section className="flex justify-center">
+          <button
+            onClick={() => setShowAddTask(true)}
+            className="inline-flex items-center gap-3 rounded-full border border-zinc-700 bg-zinc-900 px-5 py-3 text-zinc-100 shadow-lg shadow-black/30 transition hover:bg-zinc-800"
+            aria-label="Create task"
+            title="Create task"
+          >
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-900 shadow-sm">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </span>
+            <span className="text-sm font-semibold tracking-wide">Create Task</span>
+          </button>
         </section>
 
-        <section className="rounded-xl border border-zinc-700/80 bg-zinc-900/65 p-5 shadow-xl shadow-black/30">
+        <section ref={tasksSectionRef} className="rounded-xl border border-zinc-700/80 bg-zinc-900/65 p-5 shadow-xl shadow-black/30">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-zinc-100">Tasks</h2>
-            <button
-              onClick={() => setSelectedTaskId(null)}
-              className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
-            >
-              Show All
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTaskFilter('all')}
+                className={`rounded border px-3 py-1.5 text-xs ${
+                  taskFilter === 'all'
+                    ? 'border-zinc-300 bg-zinc-100 text-zinc-900'
+                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setTaskFilter('completed')}
+                className={`rounded border px-3 py-1.5 text-xs ${
+                  taskFilter === 'completed'
+                    ? 'border-zinc-300 bg-zinc-100 text-zinc-900'
+                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                Completed
+              </button>
+              <button
+                onClick={() => setTaskFilter('pending')}
+                className={`rounded border px-3 py-1.5 text-xs ${
+                  taskFilter === 'pending'
+                    ? 'border-zinc-300 bg-zinc-100 text-zinc-900'
+                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                Pending
+              </button>
+              <button
+                onClick={() => setSelectedTaskId(null)}
+                className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Show All Grids
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {tasks.map((task) => (
+            {filteredTasks.map((task) => (
               <div
                 key={task.id}
                 className={`rounded-lg border p-4 transition ${selectedTaskId === task.id ? 'border-zinc-300 bg-zinc-800/80' : 'border-zinc-700/80 bg-zinc-800/40'}`}
@@ -475,18 +509,110 @@ export default function DashboardPage() {
           </section>
         )}
 
-        <section className="rounded-xl border border-zinc-700/80 bg-zinc-900/65 p-5 shadow-xl shadow-black/30">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-100">
-            {selectedTask ? `${selectedTask.name} Grid` : 'All Task Grids'}
-          </h2>
+        <section ref={gridsSectionRef} className="rounded-xl border border-zinc-700/80 bg-zinc-900/65 p-5 shadow-xl shadow-black/30">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-zinc-100">
+              {selectedTask ? `${selectedTask.name} Grid` : 'All Task Grids'}
+            </h2>
+            <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/70 px-2 py-1">
+              <button
+                onClick={() => setSelectedYear((prev) => prev - 1)}
+                className="rounded px-2 py-1 text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                ◀
+              </button>
+              <span className="min-w-16 text-center text-sm font-semibold text-zinc-200">{selectedYear}</span>
+              <button
+                onClick={() => setSelectedYear((prev) => prev + 1)}
+                className="rounded px-2 py-1 text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                ▶
+              </button>
+              <button
+                onClick={() => setSelectedYear(currentYear)}
+                className="ml-1 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                Current
+              </button>
+            </div>
+          </div>
           <HabitGrid
             tasks={tasks}
             habitLogs={habitLogs}
             selectedTaskId={selectedTaskId}
+            selectedYear={selectedYear}
             onToggleCompletion={handleToggleCompletion}
           />
         </section>
       </main>
+
+      {showAddTask && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-100">Create Task</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddTask(false)}
+                className="rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                Close
+              </button>
+            </div>
+            <form onSubmit={handleAddTask} className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <input
+                type="text"
+                value={taskName}
+                onChange={(e) => setTaskName(e.target.value)}
+                placeholder="Task name"
+                className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500"
+              />
+              <input
+                type="text"
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="Description"
+                className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500"
+              />
+              <div className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-900 px-3 py-2">
+                <span className="text-sm text-zinc-400">Color</span>
+                <input
+                  type="color"
+                  value={taskColor}
+                  onChange={(e) => setTaskColor(e.target.value)}
+                  className="h-8 w-10 cursor-pointer border-0 bg-transparent"
+                />
+                <span className="text-xs text-zinc-500">{taskColor}</span>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-500">Start Date</label>
+                <input
+                  type="date"
+                  value={taskStartDate}
+                  onChange={(e) => setTaskStartDate(e.target.value)}
+                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-zinc-500">End Date (optional)</label>
+                <input
+                  type="date"
+                  value={taskEndDate}
+                  onChange={(e) => setTaskEndDate(e.target.value)}
+                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={addingTask}
+                className="rounded bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-white disabled:bg-zinc-400 lg:self-end"
+              >
+                {addingTask ? 'Creating...' : 'Create'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showPasswordModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">

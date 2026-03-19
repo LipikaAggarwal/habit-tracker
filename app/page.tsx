@@ -1,6 +1,54 @@
+"use client";
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+type HomeUser = {
+  id: number;
+  name: string | null;
+  email: string;
+};
 
 export default function Home() {
+  const [user, setUser] = useState<HomeUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          setUser(null);
+          return;
+        }
+
+        const data = await response.json();
+        setUser(data);
+      } catch {
+        setUser(null);
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    setUser(null);
+    setMenuOpen(false);
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-linear-to-br from-black via-zinc-950 to-zinc-900">
       <Link
@@ -10,6 +58,46 @@ export default function Home() {
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-sm border border-zinc-600 text-[10px] font-bold text-zinc-200">HT</span>
         Habit Tracker
       </Link>
+
+      <div className="absolute right-5 top-5 z-20">
+        {checkingAuth ? (
+          <div className="rounded-md border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400">Checking session...</div>
+        ) : user ? (
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="rounded-md border border-zinc-700 bg-zinc-900/80 px-4 py-2 text-sm font-medium text-zinc-100"
+            >
+              {user.name || 'Profile'}
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-12 w-52 rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-2xl">
+                <p className="px-2 py-2 text-xs text-zinc-500">{user.email}</p>
+                <Link
+                  href="/dashboard"
+                  className="block w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Open Dashboard
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="w-full rounded px-2 py-2 text-left text-sm text-red-300 hover:bg-red-900/20"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link
+            href="/auth/login"
+            className="inline-flex items-center justify-center rounded-md border border-zinc-700 bg-zinc-900/70 px-4 py-2 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-800"
+          >
+            Log In
+          </Link>
+        )}
+      </div>
 
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-16 top-12 h-64 w-64 rounded-full bg-zinc-700/10 blur-3xl" />
@@ -31,18 +119,37 @@ export default function Home() {
           </p>
 
           <div className="mb-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/auth/signup"
-              className="inline-flex w-full items-center justify-center rounded-md bg-zinc-100 px-8 py-3 text-sm font-semibold text-zinc-900 transition-all hover:bg-white sm:w-auto"
-            >
-              Get Started
-            </Link>
-            <Link
-              href="/auth/login"
-              className="inline-flex w-full items-center justify-center rounded-md border border-zinc-700 bg-zinc-900/70 px-8 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-800 sm:w-auto"
-            >
-              Log In
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex w-full items-center justify-center rounded-md bg-zinc-100 px-8 py-3 text-sm font-semibold text-zinc-900 transition-all hover:bg-white sm:w-auto"
+                >
+                  Continue To Dashboard
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex w-full items-center justify-center rounded-md border border-zinc-700 bg-zinc-900/70 px-8 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-800 sm:w-auto"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/auth/signup"
+                  className="inline-flex w-full items-center justify-center rounded-md bg-zinc-100 px-8 py-3 text-sm font-semibold text-zinc-900 transition-all hover:bg-white sm:w-auto"
+                >
+                  Get Started
+                </Link>
+                <Link
+                  href="/auth/login"
+                  className="inline-flex w-full items-center justify-center rounded-md border border-zinc-700 bg-zinc-900/70 px-8 py-3 text-sm font-semibold text-zinc-100 transition-all hover:border-zinc-500 hover:bg-zinc-800 sm:w-auto"
+                >
+                  Log In
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">

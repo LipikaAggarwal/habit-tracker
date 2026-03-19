@@ -23,6 +23,7 @@ interface HabitGridProps {
   tasks: Task[];
   habitLogs: HabitLog[];
   selectedTaskId: number | null;
+  selectedYear: number;
   onToggleCompletion: (taskId: number, date: string, completed: boolean) => Promise<void>;
 }
 
@@ -30,6 +31,7 @@ export default function HabitGrid({
   tasks,
   habitLogs,
   selectedTaskId,
+  selectedYear,
   onToggleCompletion,
 }: HabitGridProps) {
   const [isUpdating, setIsUpdating] = useState(false);
@@ -43,6 +45,16 @@ export default function HabitGrid({
     ? tasks.filter((task) => task.id === selectedTaskId)
     : tasks;
 
+  const startOfSelectedYear = useMemo(
+    () => new Date(selectedYear, 0, 1),
+    [selectedYear]
+  );
+
+  const endOfSelectedYear = useMemo(
+    () => new Date(selectedYear, 11, 31),
+    [selectedYear]
+  );
+
   const getTaskWindow = (task: Task) => {
     const start = new Date(task.startDate);
     const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -54,29 +66,26 @@ export default function HabitGrid({
     return { startDate, endDate };
   };
 
-  const getTaskWeeks = (task: Task) => {
-    const { startDate, endDate } = getTaskWindow(task);
+  const getYearWeeks = () => {
     const weeks: Array<Array<Date | null>> = [];
 
-    const calendarStart = new Date(startDate);
-    calendarStart.setDate(startDate.getDate() - startDate.getDay());
+    const calendarStart = new Date(startOfSelectedYear);
+    calendarStart.setDate(startOfSelectedYear.getDate() - startOfSelectedYear.getDay());
+
+    const calendarEnd = new Date(endOfSelectedYear);
+    calendarEnd.setDate(endOfSelectedYear.getDate() + (6 - endOfSelectedYear.getDay()));
 
     const cursor = new Date(calendarStart);
-    while (cursor <= endDate) {
+    while (cursor <= calendarEnd) {
       const week: Array<Date | null> = [];
       for (let day = 0; day < 7; day++) {
-        const d = new Date(cursor);
-        if (d < startDate || d > endDate) {
-          week.push(null);
-        } else {
-          week.push(d);
-        }
+        week.push(new Date(cursor));
         cursor.setDate(cursor.getDate() + 1);
       }
       weeks.push(week);
     }
 
-    return weeks;
+    return { weeks, calendarStart };
   };
 
   const isCompleted = (taskId: number, date: Date) => {
@@ -87,6 +96,8 @@ export default function HabitGrid({
   };
 
   const handleSquareClick = async (taskId: number, date: Date) => {
+    if (date > today) return;
+
     const dateStr = date.toISOString().split('T')[0];
     const current = isCompleted(taskId, date);
 
@@ -100,23 +111,23 @@ export default function HabitGrid({
     }
   };
 
-  const getMonthYearLabels = (weeks: Array<Array<Date | null>>) => {
+  const getMonthYearLabels = (calendarStart: Date) => {
     const labels: Array<{ weekIndex: number; label: string }> = [];
-    let lastKey = '';
 
-    weeks.forEach((week, weekIndex) => {
-      const first = week.find((d) => d !== null);
-      if (!first) return;
-
-      const month = first.toLocaleDateString('en-US', { month: 'short' });
-      const year = first.getFullYear();
-      const key = `${month}-${year}`;
-
-      if (key !== lastKey) {
-        labels.push({ weekIndex, label: `${month} ${year}` });
-        lastKey = key;
-      }
-    });
+    for (let month = 0; month < 12; month++) {
+      const monthStart = new Date(selectedYear, month, 1);
+      const diffDays = Math.floor(
+        (monthStart.getTime() - calendarStart.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const weekIndex = Math.floor(diffDays / 7);
+      labels.push({
+        weekIndex,
+        label: monthStart.toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric',
+        }),
+      });
+    }
 
     return labels;
   };
@@ -132,8 +143,9 @@ export default function HabitGrid({
   return (
     <div className="space-y-6">
       {visibleTasks.map((task) => {
-        const weeks = getTaskWeeks(task);
-        const labels = getMonthYearLabels(weeks);
+        const { weeks, calendarStart } = getYearWeeks();
+        const labels = getMonthYearLabels(calendarStart);
+        const { startDate, endDate } = getTaskWindow(task);
 
         return (
           <div key={task.id} className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
@@ -167,27 +179,58 @@ export default function HabitGrid({
                   {weeks.map((week, weekIndex) => (
                     <div key={`${task.id}-week-${weekIndex}`} className="flex flex-col gap-0.5">
                       {week.map((date, dayIndex) => {
-                        if (!date) {
-                          return (
-                            <div
-                              key={`${task.id}-empty-${weekIndex}-${dayIndex}`}
-                              className="h-3.5 w-3.5 rounded-sm border border-zinc-800 bg-zinc-950/70"
-                            />
-                          );
-                        }
+                        if (!date) return null;
 
+                        const isInSelectedYear = date.getFullYear() === selectedYear;
+                        const isWithinTaskDuration =
+                          date >= startDate && date <= endDate;
+                        const isFutureDate = date > today;
                         const done = isCompleted(task.id, date);
+                        const canEdit =
+                          isInSelectedYear &&
+                          isWithinTaskDuration &&
+                          !isFutureDate &&
+                          !isUpdating;
+
+                        const borderColor = !isInSelectedYear
+                          ? 'transparent'
+                          : isWithinTaskDuration
+                            ? done
+                              ? task.color
+                              : task.color
+                            : '#27272a';
+
+                        const backgroundColor = !isInSelectedYear
+                          ? 'transparent'
+                          : isWithinTaskDuration
+                            ? done
+                              ? task.color
+                              : '#111827'
+                            : '#09090b';
+
+                        const opacity = !isInSelectedYear
+                          ? 0
+                          : isWithinTaskDuration
+                            ? done
+                              ? 1
+                              : 0.8
+                            : 0.35;
+
                         return (
                           <button
                             key={`${task.id}-${date.toISOString()}`}
-                            onClick={() => handleSquareClick(task.id, date)}
-                            disabled={isUpdating || task.completed}
+                            onClick={() => {
+                              if (canEdit) {
+                                handleSquareClick(task.id, date);
+                              }
+                            }}
+                            disabled={!canEdit}
                             className="h-3.5 w-3.5 rounded-sm border transition-all hover:scale-105"
                             style={{
-                              borderColor: done ? task.color : '#3f3f46',
-                              backgroundColor: done ? task.color : '#18181b',
-                              opacity: task.completed ? 0.6 : 1,
-                              cursor: task.completed ? 'not-allowed' : 'pointer',
+                              borderColor,
+                              backgroundColor,
+                              opacity,
+                              cursor: canEdit ? 'pointer' : 'not-allowed',
                             }}
                             title={`${task.name} - ${date.toDateString()} (${done ? 'done' : 'pending'})`}
                           />
